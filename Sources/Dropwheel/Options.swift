@@ -12,14 +12,16 @@ struct WheelOption: Identifiable {
     let perform: @MainActor ([URL]) async -> Outcome
 }
 
-enum Mode {
+enum Mode: String, CaseIterable, Identifiable {
     case convert, tools, actions
+
+    var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .convert: return "⇧ Convert"
-        case .tools: return "⌘ Tools"
-        case .actions: return "⌃ Actions"
+        case .convert: return "Convert"
+        case .tools: return "Tools"
+        case .actions: return "Actions"
         }
     }
 }

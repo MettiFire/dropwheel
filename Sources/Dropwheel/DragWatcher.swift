@@ -1,21 +1,22 @@
 import AppKit
 
-/// Detects a system-wide file drag by watching the drag pasteboard, and
-/// edge-detects Shift / Command / Control taps while the mouse is down.
-/// Polling NSEvent.modifierFlags needs no Accessibility permission.
+/// Watches the drag pasteboard. Nothing is shown until, during a file drag,
+/// the user taps one of the configured trigger keys.
 @MainActor
 final class DragWatcher {
-    var onStart: (([URL]) -> Void)?
+    var onActivate: (([URL], Mode) -> Void)?
     var onModeKey: ((Mode) -> Void)?
     var onEnd: (() -> Void)?
 
     private let pb = NSPasteboard(name: .drag)
     private var lastCount: Int
     private var dragging = false
+    private var activated = false
+    private var urls: [URL] = []
     private var lastFlags: NSEvent.ModifierFlags = []
     private var timer: Timer?
 
-    private static let tracked: NSEvent.ModifierFlags = [.shift, .command, .control]
+    private static let tracked: NSEvent.ModifierFlags = [.shift, .command, .control, .option]
 
     init() {
         lastCount = NSPasteboard(name: .drag).changeCount
@@ -33,29 +34,40 @@ final class DragWatcher {
         if pb.changeCount != lastCount {
             lastCount = pb.changeCount
             if mouseDown, !dragging,
-               let urls = pb.readObjects(forClasses: [NSURL.self],
-                                         options: [.urlReadingFileURLsOnly: true]) as? [URL],
-               !urls.isEmpty {
+               let found = pb.readObjects(forClasses: [NSURL.self],
+                                          options: [.urlReadingFileURLsOnly: true]) as? [URL],
+               !found.isEmpty {
                 dragging = true
+                activated = false
+                urls = found
                 lastFlags = NSEvent.modifierFlags.intersection(Self.tracked)
-                onStart?(urls)
             }
         }
 
         guard dragging else { return }
 
         if !mouseDown {
+            if activated { onEnd?() }
             dragging = false
-            onEnd?()
+            activated = false
             return
         }
 
         let flags = NSEvent.modifierFlags.intersection(Self.tracked)
         let newlyPressed = flags.subtracting(lastFlags)
         lastFlags = flags
+        guard !newlyPressed.isEmpty else { return }
 
-        if newlyPressed.contains(.shift) { onModeKey?(.convert) }
-        else if newlyPressed.contains(.command) { onModeKey?(.tools) }
-        else if newlyPressed.contains(.control) { onModeKey?(.actions) }
+        for key in TriggerKey.allCases where newlyPressed.contains(key.flag) {
+            if let mode = Preferences.shared.mode(for: key) {
+                if activated {
+                    onModeKey?(mode)
+                } else {
+                    activated = true
+                    onActivate?(urls, mode)
+                }
+                break
+            }
+        }
     }
 }

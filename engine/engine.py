@@ -7,12 +7,20 @@
 tools: compress | resize-50 | rotate-90 | strip-metadata | split-pdf | merge-pdf
 Outputs are written next to the source and never overwrite existing files.
 """
+import glob
+import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+os.environ["PATH"] = os.pathsep.join([
+    "/opt/homebrew/bin", "/usr/local/bin",
+    *glob.glob(os.path.expanduser("~/Library/Python/*/bin")),
+    os.environ.get("PATH", ""),
+])
 
 IMG = {"jpg", "jpeg", "png", "webp", "heic", "tiff", "tif", "avif", "bmp"}
 AUD = {"mp3", "m4a", "wav", "flac", "ogg", "opus", "aiff", "wma"}
@@ -21,6 +29,7 @@ DOC = {"docx", "md", "txt", "epub", "html"}
 SLIDE = {"pptx", "ppt"}
 SHEET = {"xlsx", "xls", "ods", "csv", "tsv"}
 SUB = {"srt", "vtt"}
+EBOOK = {"epub", "azw3", "azw", "mobi", "fb2"}
 ARC = {"zip", "tar", "tgz", "gz", "rar"}
 
 
@@ -42,6 +51,14 @@ def unique(p: Path) -> Path:
         if not q.exists():
             return q
         i += 1
+
+
+def calibre_bin():
+    for c in ("ebook-convert", "/Applications/calibre.app/Contents/MacOS/ebook-convert"):
+        p = shutil.which(c) or (c if Path(c).exists() else None)
+        if p:
+            return p
+    sys.exit("missing dependency: calibre (brew install --cask calibre)")
 
 
 def soffice_bin():
@@ -139,6 +156,10 @@ def convert(src: Path, ext: str):
     elif s in AUD | VID and ext in AUD | VID:
         need("ffmpeg")
         sh("ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", src, *(["-vn"] if ext in AUD else []), out)
+    elif (s in EBOOK
+          or (ext in {"azw3", "mobi", "fb2"} and s in DOC | {"rtf"})
+          or (s == "pdf" and ext in {"epub", "azw3", "mobi", "fb2"})):
+        sh(calibre_bin(), src, out)
     elif s == "pdf":
         pdf_to(src, ext, out)
     elif s in SLIDE and ext in {"pdf", "png", "jpg"}:
@@ -223,12 +244,26 @@ def tool(name: str, files):
         tool_single(name, f)
 
 
+def doctor():
+    for t in ["ffmpeg", "magick", "pandoc", "pdftoppm", "pdftotext", "pdfseparate",
+              "gs", "unar", "pdf2docx", "textutil", "ditto"]:
+        print(("ok      " if shutil.which(t) else "MISSING ") + t)
+    lo = any(shutil.which(c) or Path(c).exists() for c in
+             ("soffice", "/Applications/LibreOffice.app/Contents/MacOS/soffice"))
+    print(("ok      " if lo else "MISSING ") + "soffice (LibreOffice)")
+    cal = any(shutil.which(c) or Path(c).exists() for c in
+              ("ebook-convert", "/Applications/calibre.app/Contents/MacOS/ebook-convert"))
+    print(("ok      " if cal else "MISSING ") + "ebook-convert (calibre)")
+
+
 def main(argv):
     try:
         if len(argv) >= 4 and argv[1] == "convert":
             convert(Path(argv[2]).expanduser(), argv[3].lstrip("."))
         elif len(argv) >= 4 and argv[1] == "tool":
             tool(argv[2], [Path(a).expanduser() for a in argv[3:]])
+        elif len(argv) == 2 and argv[1] == "doctor":
+            doctor()
         else:
             print(__doc__)
             sys.exit(2)

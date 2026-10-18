@@ -1,7 +1,7 @@
 import Foundation
 
 enum Category: Hashable {
-    case image, audio, video, pdf, document, slides, spreadsheet, subtitle, archive, other
+    case image, audio, video, pdf, document, ebook, slides, spreadsheet, subtitle, archive, other
 
     static func of(_ url: URL) -> Category {
         if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
@@ -13,7 +13,8 @@ enum Category: Hashable {
         case "mp3", "m4a", "wav", "flac", "ogg", "opus", "aiff", "wma": return .audio
         case "mp4", "mov", "mkv", "webm", "avi", "wmv", "gif": return .video
         case "pdf": return .pdf
-        case "docx", "md", "txt", "epub", "html", "rtf", "rtfd": return .document
+        case "epub", "azw3", "azw", "mobi", "fb2": return .ebook
+        case "docx", "md", "txt", "html", "rtf", "rtfd": return .document
         case "pptx", "ppt": return .slides
         case "xlsx", "xls", "ods", "csv", "tsv": return .spreadsheet
         case "srt", "vtt": return .subtitle
@@ -27,8 +28,9 @@ enum Category: Hashable {
         case .image: return ["jpg", "png", "webp", "heic", "tiff", "avif", "bmp", "pdf"]
         case .audio: return ["mp3", "m4a", "wav", "flac", "ogg", "opus", "aiff"]
         case .video: return ["mp4", "mov", "mkv", "webm", "avi", "gif", "mp3"]
-        case .pdf: return ["docx", "png", "jpg", "txt"]
-        case .document: return ["docx", "md", "txt", "epub", "html", "pdf"]
+        case .pdf: return ["docx", "png", "jpg", "txt", "epub", "azw3"]
+        case .document: return ["docx", "md", "txt", "epub", "html", "pdf", "azw3", "mobi"]
+        case .ebook: return ["epub", "azw3", "mobi", "fb2", "pdf", "txt", "docx"]
         case .slides: return ["pdf", "png", "jpg"]
         case .spreadsheet: return ["xlsx", "ods", "csv", "tsv", "pdf"]
         case .subtitle: return ["srt", "vtt", "txt"]
@@ -51,8 +53,12 @@ enum Engine {
     /// Path to engine/engine.py. Override with DROPWHEEL_ENGINE;
     /// by default it is resolved relative to the working directory (run from the repo root).
     static var scriptPath: String {
-        ProcessInfo.processInfo.environment["DROPWHEEL_ENGINE"]
-            ?? FileManager.default.currentDirectoryPath + "/engine/engine.py"
+        if let p = ProcessInfo.processInfo.environment["DROPWHEEL_ENGINE"] { return p }
+        if let r = Bundle.main.resourcePath {
+            let p = r + "/engine/engine.py"
+            if FileManager.default.fileExists(atPath: p) { return p }
+        }
+        return FileManager.default.currentDirectoryPath + "/engine/engine.py"
     }
 
     static func run(_ args: [String]) async -> (ok: Bool, output: String) {
