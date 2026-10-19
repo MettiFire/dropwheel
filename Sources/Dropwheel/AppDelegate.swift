@@ -2,29 +2,32 @@ import AppKit
 import SwiftUI
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let model = WheelModel()
     private var panel: WheelPanel!
     private var watcher: DragWatcher!
     private var statusItem: NSStatusItem!
-    private var settingsWindow: NSWindow?
+    private var popover: NSPopover!
+    private var lastClosed = Date.distantPast
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         panel = WheelPanel(model: model)
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = MenuIcon.make()
-        statusItem.button?.toolTip = "Dropwheel"
+        if let button = statusItem.button {
+            button.image = MenuIcon.make()
+            button.toolTip = "Dropwheel"
+            button.target = self
+            button.action = #selector(togglePopover(_:))
+        }
 
-        let menu = NSMenu()
-        let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
-        settings.target = self
-        menu.addItem(settings)
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Dropwheel",
-                                action: #selector(NSApplication.terminate(_:)),
-                                keyEquivalent: "q"))
-        statusItem.menu = menu
+        popover = NSPopover()
+        popover.behavior = .transient
+        popover.delegate = self
+        popover.contentSize = NSSize(width: 340, height: 500)
+        popover.contentViewController = NSHostingController(
+            rootView: SettingsView(quit: { NSApp.terminate(nil) })
+        )
 
         model.onFinish = { [weak self] in self?.panel.orderOut(nil) }
 
@@ -42,7 +45,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func dragEnded() {
-        // Give the drop a moment to land before closing the wheel.
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 800_000_000)
             if !model.busy && model.status == nil {
@@ -51,16 +53,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func openSettings() {
-        if settingsWindow == nil {
-            let w = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
-            w.title = "Dropwheel Settings"
-            w.styleMask = [.titled, .closable]
-            w.isReleasedWhenClosed = false
-            w.center()
-            settingsWindow = w
+    @objc private func togglePopover(_ sender: Any?) {
+        guard let button = statusItem.button else { return }
+        if popover.isShown {
+            popover.performClose(sender)
+        } else if Date().timeIntervalSince(lastClosed) > 0.25 {
+            NSApp.activate(ignoringOtherApps: true)
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
         }
-        NSApp.activate(ignoringOtherApps: true)
-        settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        lastClosed = Date()
     }
 }

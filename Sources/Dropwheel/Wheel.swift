@@ -12,6 +12,7 @@ final class WheelModel: ObservableObject {
     @Published var mode: Mode? = nil
     @Published var busy = false
     @Published var status: String? = nil
+    @Published var hoverIndex: Int? = nil
 
     var onFinish: (() -> Void)?
 
@@ -20,8 +21,23 @@ final class WheelModel: ObservableObject {
     func reset(files: [URL]) {
         self.files = files
         mode = nil
+        hoverIndex = nil
         busy = false
         status = nil
+    }
+
+    func sliceIndex(at point: CGPoint) -> Int? {
+        let count = options.count
+        guard count > 0 else { return nil }
+        let dx = Double(point.x) - Double(wheelSize) / 2
+        let dy = Double(point.y) - Double(wheelSize) / 2
+        let r = (dx * dx + dy * dy).squareRoot()
+        guard r >= Double(wheelInner) - 2, r <= Double(wheelOuter) + 8 else { return nil }
+        let span = 2 * Double.pi / Double(count)
+        var rel = atan2(dy, dx) + Double.pi / 2
+        rel = rel.truncatingRemainder(dividingBy: 2 * Double.pi)
+        if rel < 0 { rel += 2 * Double.pi }
+        return min(Int(rel / span), count - 1)
     }
 
     func run(_ option: WheelOption) {
@@ -84,6 +100,38 @@ private let wheelOuter: CGFloat = 110
 private let wheelCorner: CGFloat = 6
 private let wheelGap: Double = 0.05
 
+/// One drop area for the whole wheel: the slice under the cursor is computed
+/// from its angle, so the highlight follows the pointer around the ring.
+@MainActor
+struct WheelDropDelegate: DropDelegate {
+    let model: WheelModel
+
+    func validateDrop(info: DropInfo) -> Bool {
+        info.hasItemsConforming(to: [.fileURL])
+    }
+
+    func dropEntered(info: DropInfo) {
+        model.hoverIndex = model.sliceIndex(at: info.location)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        model.hoverIndex = model.sliceIndex(at: info.location)
+        return DropProposal(operation: .copy)
+    }
+
+    func dropExited(info: DropInfo) {
+        model.hoverIndex = nil
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        defer { model.hoverIndex = nil }
+        let options = model.options
+        guard let i = model.sliceIndex(at: info.location), i < options.count else { return false }
+        model.run(options[i])
+        return true
+    }
+}
+
 struct WheelView: View {
     @ObservedObject var model: WheelModel
 
@@ -91,17 +139,21 @@ struct WheelView: View {
         let opts = model.options
         ZStack {
             ForEach(Array(opts.enumerated()), id: \.element.id) { index, option in
-                WheelSlice(option: option, index: index, count: opts.count, model: model)
+                WheelSlice(option: option, index: index, count: opts.count,
+                           hovered: model.hoverIndex == index)
             }
             CenterView(model: model)
         }
         .frame(width: wheelSize, height: wheelSize)
+        .contentShape(Rectangle())
+        .onDrop(of: [.fileURL], delegate: WheelDropDelegate(model: model))
         .preferredColorScheme(.light)
     }
 }
 
 struct CenterView: View {
     @ObservedObject var model: WheelModel
+    @ObservedObject private var prefs = Preferences.shared
 
     var body: some View {
         VStack(spacing: 2) {
@@ -117,13 +169,13 @@ struct CenterView: View {
             }
             Text("\(model.files.count) file\(model.files.count == 1 ? "" : "s")")
                 .font(.system(size: 9))
-                .foregroundColor(.secondary)
+                .opacity(0.6)
         }
-        .foregroundColor(Color(white: 0.15))
+        .foregroundColor(prefs.theme.ink)
         .multilineTextAlignment(.center)
         .frame(width: 72, height: 72)
-        .background(Circle().fill(Color.white.opacity(0.96)))
-        .overlay(Circle().stroke(Color.black.opacity(0.08), lineWidth: 0.5))
+        .background(Circle().fill(Color.white.opacity(0.97)))
+        .overlay(Circle().stroke(prefs.theme.stroke, lineWidth: 0.8))
         .shadow(color: .black.opacity(0.18), radius: 4, y: 1)
     }
 }
@@ -132,10 +184,11 @@ struct WheelSlice: View {
     let option: WheelOption
     let index: Int
     let count: Int
-    @ObservedObject var model: WheelModel
-    @State private var hover = false
+    let hovered: Bool
+    @ObservedObject private var prefs = Preferences.shared
 
     var body: some View {
+        let theme = prefs.theme
         let span = 2 * Double.pi / Double(count)
         let start = -Double.pi / 2 + Double(index) * span + wheelGap / 2
         let end = start + span - wheelGap
@@ -146,9 +199,9 @@ struct WheelSlice: View {
                                 cornerRadius: wheelCorner)
         ZStack {
             shape
-                .fill(hover ? Color.orange : Color.white.opacity(0.96))
+                .fill(hovered ? theme.hover : theme.base)
                 .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
-            shape.stroke(Color.black.opacity(0.08), lineWidth: 0.5)
+            shape.stroke(theme.stroke, lineWidth: 0.7)
             VStack(spacing: 1) {
                 Image(systemName: option.symbol).font(.system(size: 14))
                 Text(option.title)
@@ -157,15 +210,12 @@ struct WheelSlice: View {
                     .minimumScaleFactor(0.6)
             }
             .frame(width: 48)
-            .foregroundColor(hover ? .white : Color(white: 0.15))
+            .foregroundColor(hovered ? Color.white : theme.ink)
             .offset(x: CGFloat(labelRadius * cos(mid)), y: CGFloat(labelRadius * sin(mid)))
         }
-        .contentShape(shape)
-        .onDrop(of: [.fileURL], isTargeted: $hover) { _ in
-            model.run(option)
-            return true
-        }
-        .animation(.easeOut(duration: 0.12), value: hover)
+        .scaleEffect(hovered ? 1.04 : 1)
+        .animation(.easeOut(duration: 0.1), value: hovered)
+        .allowsHitTesting(false)
     }
 }
 

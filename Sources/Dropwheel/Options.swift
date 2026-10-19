@@ -74,6 +74,8 @@ enum Options {
         case .image:
             specs = [compress,
                      ToolSpec(name: "resize-50", title: "Resize 50%", symbol: "arrow.up.left.and.arrow.down.right"),
+                     ToolSpec(name: "resize-25", title: "Resize 25%", symbol: "minus.magnifyingglass"),
+                     ToolSpec(name: "resize-1080", title: "Max 1080px", symbol: "photo"),
                      ToolSpec(name: "rotate-90", title: "Rotate", symbol: "rotate.right"),
                      strip]
         case .video:

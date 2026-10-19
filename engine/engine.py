@@ -213,10 +213,15 @@ def tool_single(name: str, f: Path):
                "-dPDFSETTINGS=/ebook", f"-sOutputFile={out}", f)
         else:
             sys.exit(f"compress: unsupported type {s}")
-    elif name in {"resize-50", "rotate-90"} and s in IMG:
+    elif name.startswith("resize-") and s in IMG:
         need("magick")
-        arg = ["-resize", "50%"] if name == "resize-50" else ["-rotate", "90"]
-        sh("magick", f, *arg, outname(name))
+        spec = {"resize-50": "50%", "resize-25": "25%", "resize-1080": "1080x1080>"}.get(name)
+        if spec is None:
+            sys.exit(f"unknown resize preset: {name}")
+        sh("magick", f, "-resize", spec, outname(name))
+    elif name == "rotate-90" and s in IMG:
+        need("magick")
+        sh("magick", f, "-rotate", "90", outname(name))
     elif name == "strip-metadata":
         out = outname("clean")
         if s in IMG:

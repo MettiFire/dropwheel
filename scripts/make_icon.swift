@@ -48,8 +48,15 @@ func render(size: Int) -> Data {
 
     let bg = NSBezierPath(roundedRect: NSRect(x: 100, y: 100, width: 824, height: 824),
                           xRadius: 185, yRadius: 185)
-    let top = NSColor(srgbRed: 1.0, green: 0.71, blue: 0.37, alpha: 1)
-    let bottom = NSColor(srgbRed: 1.0, green: 0.42, blue: 0.17, alpha: 1)
+    let palette: (NSColor, NSColor, NSColor) = iconTheme == "sky"
+        ? (NSColor(srgbRed: 0.62, green: 0.84, blue: 1.0, alpha: 1),
+           NSColor(srgbRed: 0.18, green: 0.55, blue: 0.98, alpha: 1),
+           NSColor(srgbRed: 0.20, green: 0.50, blue: 0.95, alpha: 1))
+        : (NSColor(srgbRed: 0.79, green: 0.71, blue: 1.0, alpha: 1),
+           NSColor(srgbRed: 0.55, green: 0.40, blue: 0.98, alpha: 1),
+           NSColor(srgbRed: 0.50, green: 0.36, blue: 0.95, alpha: 1))
+    let top = palette.0
+    let bottom = palette.1
     NSGradient(starting: top, ending: bottom)!.draw(in: bg, angle: -90)
 
     NSGraphicsContext.saveGraphicsState()
@@ -81,7 +88,7 @@ func render(size: Int) -> Data {
     arrow.line(to: CGPoint(x: 536, y: 506))
     arrow.line(to: CGPoint(x: 570, y: 506))
     arrow.close()
-    NSColor(srgbRed: 1.0, green: 0.48, blue: 0.2, alpha: 1).set()
+    palette.2.set()
     arrow.lineJoinStyle = .round
     arrow.lineWidth = 14
     arrow.fill()
@@ -91,6 +98,7 @@ func render(size: Int) -> Data {
     return rep.representation(using: .png, properties: [:])!
 }
 
+let iconTheme = CommandLine.arguments.count > 2 ? CommandLine.arguments[2] : "lilac"
 let outDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "AppIcon.iconset"
 try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
 

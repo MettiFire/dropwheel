@@ -14,7 +14,7 @@ cp engine/engine.py "$APP/Contents/Resources/engine/engine.py"
 
 mkdir -p build docs
 rm -rf build/AppIcon.iconset
-swift scripts/make_icon.swift build/AppIcon.iconset
+swift scripts/make_icon.swift build/AppIcon.iconset "${ICON_THEME:-lilac}"
 iconutil -c icns build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
 cp build/AppIcon.iconset/icon_512x512.png docs/icon.png
 
