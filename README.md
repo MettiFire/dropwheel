@@ -1,3 +1,4 @@
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/MettiFire/badge.svg)](https://hub.xerj.org/contributors/MettiFire)
 <p align="center">
   <img src="docs/icon.png" width="128" alt="Dropwheel">
 </p>
